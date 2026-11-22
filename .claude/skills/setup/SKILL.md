@@ -13,11 +13,12 @@ All data and weights go in `generated/` (gitignored), except the HF cache and th
 
 | env | install | type | used by | weights |
 |---|---|---|---|---|
-| ace-ego-hand | `../egoCUBE/envs/ace-ego-hand/install.sh` (egoCUBE repo) | conda, py3.10, torch 2.5.1+cu124 | `vidHMR.features.wan22` | Wan2.2-Fun-5B-Control, ~25 GB |
+| ace-ego-hand | `envs/ace-ego-hand/install.sh` | conda, py3.10, torch 2.5.1+cu124 | `vidHMR.features.wan22` | Wan2.2-Fun-5B-Control, 24 GB (in ACE's `ckpt/`) |
 | cosmos3 | `envs/cosmos3/install.sh` | uv venv, py3.12, torch 2.11.0+cu128, diffusers at a commit | `vidHMR.features.cosmos3`, `scripts/cosmos3_edge_i2v.py` | nvidia/Cosmos3-Edge, ~8.6 GB (HF cache) |
 | sam-3d-body | `envs/sam-3d-body/install.sh` | conda, py3.11, torch 2.5.1+cu121, detectron2 + MoGe built from git | `scripts/sam3d_body_video.py`, `scripts/sam3d_body_3dpw_oc.sh` | SAM 3D Body, ViTDet, MoGe-2 in `generated/checkpoints/`, ~6.5 GB |
 
-Both scripts in `envs/` record the commands that ran on genos on 2026-11-20, with pinned versions.
+The cosmos3 and sam-3d-body scripts record the commands that ran on genos on 2026-11-20. The
+ace-ego-hand script is egoCUBE's script, reduced to what wan22 needs. All pin their versions.
 Their paths are variables at the top (genos layout); change them on another machine.
 
 ## Order
@@ -27,26 +28,17 @@ Their paths are variables at the top (genos layout); change them on another mach
    - The 3DPW licence (https://virtualhumans.mpi-inf.mpg.de/3DPW/license.html).
 2. **Submodules:** `git submodule update --init` (ACE-Ego-Hand, VideoX-Fun, sam-3d-body, pinned
    commits). Do not copy external code into the repo.
-3. **ACE links.** `vidHMR.features.wan22` imports from `external/ACE-Ego-Hand`, which expects two
-   gitignored folders inside it:
-   ```bash
-   ln -s ../VideoX-Fun external/ACE-Ego-Hand/third_party
-   mkdir -p external/ACE-Ego-Hand/ckpt
-   # genos: link the copy that egoCUBE already has
-   ln -s /edrive4/srohatgi/egoCUBE/external/ACE-Ego-Hand/ckpt/Wan2.2-Fun-5B-Control \
-       external/ACE-Ego-Hand/ckpt/Wan2.2-Fun-5B-Control
-   # elsewhere: download it
-   hf download alibaba-pai/Wan2.2-Fun-5B-Control --revision b8bc1a65ab71d054ba4636dc0dac104aa4df2686 \
-       --local-dir external/ACE-Ego-Hand/ckpt/Wan2.2-Fun-5B-Control
-   ```
-4. **Envs:** run each install script (the weights download is the last step of each).
+3. **Envs:** run each install script (the weights download is the last step of each).
+   - `bash envs/ace-ego-hand/install.sh`. It also links `external/VideoX-Fun` as ACE's gitignored
+     `third_party/` and downloads the Wan weights into ACE's gitignored `ckpt/`, where ACE's code
+     looks for them. vidHMR is not installed in this env: run it with `PYTHONPATH=src`.
    - `bash envs/cosmos3/install.sh`
    - `bash envs/sam-3d-body/install.sh` (builds detectron2 with gcc 10 and CUDA 12.1; ~20 min)
-   - ace-ego-hand: on genos it already exists at
-     `/edrive4/srohatgi/egocube_deps/conda/envs/ace-ego-hand`. Elsewhere, build it with the egoCUBE
-     script (`EGOCUBE_ROOT` sets its prefix). vidHMR is not installed in it: run with
-     `PYTHONPATH=src`.
-5. **3DPW** (5.2 GB unpacked) into `generated/datasets/3DPW`:
+
+   On genos the ace-ego-hand env already exists at
+   `/edrive4/srohatgi/egocube_deps/conda/envs/ace-ego-hand` (built for egoCUBE), and
+   `external/ACE-Ego-Hand/ckpt/Wan2.2-Fun-5B-Control` links egoCUBE's copy of the weights.
+4. **3DPW** (5.2 GB unpacked) into `generated/datasets/3DPW`:
    ```bash
    mkdir -p generated/datasets/3DPW && cd generated/datasets/3DPW
    for f in readme_and_demo sequenceFiles imageFiles; do
@@ -56,7 +48,7 @@ Their paths are variables at the top (genos layout); change them on another mach
    ```
    The ground truth uses gendered SMPL. On genos only SMPL_NEUTRAL is available, in
    `/edrive4/srohatgi/HOSIG/body_models/smpl/`.
-6. **Check:** run each user on a few frames.
+5. **Check:** run each user on a few frames.
    ```bash
    PYTHONPATH=src env -u LD_LIBRARY_PATH \
        /edrive4/srohatgi/egocube_deps/conda/envs/ace-ego-hand/bin/python \
