@@ -1,0 +1,9 @@
+[submodule "external/ACE-Ego-Hand"]
+	path = external/ACE-Ego-Hand
+	url = https://github.com/ggxxii/ACE-Ego-Hand
+[submodule "external/sam-3d-body"]
+	path = external/sam-3d-body
+	url = https://github.com/facebookresearch/sam-3d-body
+[submodule "external/VideoX-Fun"]
+	path = external/VideoX-Fun
+	url = https://github.com/aigc-apps/VideoX-Fun

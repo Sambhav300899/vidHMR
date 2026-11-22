@@ -1,0 +1,26 @@
+[project]
+name = "vidHMR"
+version = "0.1.0"
+description = "Human mesh recovery with a video DiT as the encoder"
+requires-python = ">=3.10"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project.optional-dependencies]
+dev = ["ruff"]
+
+# PEP 8 via ruff (formatter + linter); 99 columns is the limit PEP 8 allows teams to agree on.
+[tool.ruff]
+line-length = 99
+src = ["src"]
+extend-exclude = ["external"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "N", "UP", "B"]
+ignore = [
+    "N806", "N803", "N815",  # math-style names (K, world_T_camera, F) for matrices, counts
+    "N999",  # the package name vidHMR is the project's chosen name
+]
