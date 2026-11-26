@@ -1,0 +1,28 @@
+# Training on the train split (task 5 of docs/training_plan.md).
+# python -m vidHMR.train configs/train.toml
+
+name = "train"
+backbone = "wan22_fun5b_t0"
+layer = 15  # the Wan block that ACE taps
+bedlam_sequences = 0  # BEDLAM windows added to the 3DPW train split (vidHMR.datasets.bedlam)
+
+epochs = 250
+batch_size = 16  # one epoch = 20 batches (19 portrait, 1 landscape)
+warmup_epochs = 10
+learning_rate = 2e-4
+weight_decay = 0.01
+grad_clip = 1.0
+log_every = 1  # epochs
+validate_every = 10  # epochs; best.pt has the lowest validation MPJPE
+seed = 0
+
+[loss_weights]  # the ACE values
+rotation_geodesic = 1.0
+rotation_mse = 1.0
+betas = 0.1
+joints_relative = 10.0
+joints_3d = 5.0
+pelvis = 1.0
+joints_2d = 1.0
+direct_joints_relative = 10.0  # as joints_relative and joints_2d, on the direct joints
+direct_joints_2d = 1.0

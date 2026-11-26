@@ -1,0 +1,32 @@
+# Overfit milestone 2 (task 5 of docs/training_plan.md): two people in the same window; the
+# features are the same, only the prompt mask differs.
+# python -m vidHMR.train configs/overfit_two_people.toml
+
+name = "overfit_two_people"
+backbone = "wan22_fun5b_t0"
+layer = 15  # the Wan block that ACE taps
+items = [  # sequence, first frame of the window, person
+    ["courtyard_arguing_00", 240, 0],  # woman
+    ["courtyard_arguing_00", 240, 1],  # man
+]
+
+epochs = 2000  # the two items in one batch: one step per epoch
+batch_size = 2
+warmup_epochs = 50
+learning_rate = 2e-4
+weight_decay = 0.01
+grad_clip = 1.0
+log_every = 25  # epochs
+validate_every = 500  # epochs; the overfit does not generalize, this only checks the code
+seed = 0
+
+[loss_weights]  # the ACE values
+rotation_geodesic = 1.0
+rotation_mse = 1.0
+betas = 0.1
+joints_relative = 10.0
+joints_3d = 5.0
+pelvis = 1.0
+joints_2d = 1.0
+direct_joints_relative = 10.0  # as joints_relative and joints_2d, on the direct joints
+direct_joints_2d = 1.0

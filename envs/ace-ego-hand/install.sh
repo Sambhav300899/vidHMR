@@ -10,6 +10,7 @@ set -euo pipefail
 
 REPO=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
 ENV=${ENV:-/edrive4/srohatgi/envs/ace-ego-hand}
+CONDA=${CONDA:-conda}  # e.g. CONDA="$REPO/.toolchains/bin/micromamba" on a machine without conda
 [ ! -e "$ENV" ] || { echo "$ENV exists; not touching it (set ENV=<new prefix>)"; exit 1; }
 ACE=$REPO/external/ACE-Ego-Hand
 export HF_HOME=${HF_HOME:-/edrive4/srohatgi/hf_home}  # keep the HF cache off the full / disk
@@ -28,7 +29,7 @@ git -C "$REPO" submodule update --init external/ACE-Ego-Hand external/VideoX-Fun
 [ -e "$ACE/third_party" ] || ln -s ../VideoX-Fun "$ACE/third_party"
 
 # 2. Env (the conda base on genos is read-only -> --prefix)
-conda create -y -q -p "$ENV" python=3.10
+$CONDA create -y -q -p "$ENV" python=3.10
 
 # 3. torch first, pinned (ACE's requirements.txt says CUDA 12.1, but PyPI's 2.5.1 is the cu124
 #    build, which is what ran); torchvision 0.20.1 is needed by VideoX-Fun and must match

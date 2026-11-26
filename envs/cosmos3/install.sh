@@ -5,13 +5,13 @@
 # Test: scripts/cosmos3_edge_i2v.py (official image-to-video example, 480p, 121 frames).
 set -euo pipefail
 
-REPO=/edrive4/srohatgi/vidHMR
-ENV=/edrive4/srohatgi/envs/cosmos3
-UV=/edrive4/srohatgi/egocube_deps/bin/uv
-export UV_CACHE_DIR=/edrive4/srohatgi/egocube_deps/uv_cache
+REPO=${REPO:-/edrive4/srohatgi/vidHMR}
+ENV=${ENV:-/edrive4/srohatgi/envs/cosmos3}
+UV=${UV:-/edrive4/srohatgi/egocube_deps/bin/uv}
+export UV_CACHE_DIR=${UV_CACHE_DIR:-/edrive4/srohatgi/egocube_deps/uv_cache}
 # Keep uv's managed Pythons on /edrive4 (the default ~/.local/share/uv is on the full / disk).
-export UV_PYTHON_INSTALL_DIR=/edrive4/srohatgi/egocube_deps/uv_python
-export HF_HOME=/edrive4/srohatgi/hf_home  # keep the HF cache (and saved token) off /
+export UV_PYTHON_INSTALL_DIR=${UV_PYTHON_INSTALL_DIR:-/edrive4/srohatgi/egocube_deps/uv_python}
+export HF_HOME=${HF_HOME:-/edrive4/srohatgi/hf_home}  # keep the HF cache (and saved token) off /
 DIFFUSERS_COMMIT=c215605a189169236544c1c9828789bfca0891d1  # diffusers main on 2026-11-20
 MODEL_REV=6afc1256321c3a8e623d89be3bc5117a1e90f96b         # Cosmos3-Edge main on 2026-11-20
 

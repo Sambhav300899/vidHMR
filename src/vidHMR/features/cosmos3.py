@@ -15,18 +15,48 @@ import torch
 from diffusers import Cosmos3OmniPipeline
 from huggingface_hub import snapshot_download
 
-from vidHMR import threedpw
-from vidHMR.features import run
+from vidHMR.datasets import pw3d
+from vidHMR.features import LONG, SHORT, WINDOW, cached_text, run
 
 MODEL_ID = "nvidia/Cosmos3-Edge"
 REVISION = "6afc1256321c3a8e623d89be3bc5117a1e90f96b"  # main on 2026-11-20
 NAME = "cosmos3_edge_t0"
 LAYERS = (5, 9, 14, 19, 23, 27)  # layers (of 28) at the depths of the Wan2.2 blocks (of 30)
-PROMPT = "A video of a person."
+PROMPT = (
+    "Renders of a 3D human body mesh: color-coded depth, body joint skeleton, surface normals."
+)
+
+
+_SEGMENTS: dict[str, dict] = {}  # text_segment results already read from disk
 
 
 class _StopError(Exception):
     """Raised after the last tapped layer: nothing later is needed."""
+
+
+def text_segment(pipe, n_frames: int, h: int, w: int, device) -> dict:
+    """The packed text of the joint sequence for one window size, cached on disk and in memory.
+
+    Cosmos3 has no text encoder: the transformer embeds token IDs itself. The IDs depend on the
+    window (the prompt gets a duration and a resolution sentence), so each size has its own entry.
+    """
+    key = {
+        "revision": REVISION,
+        "n_frames": n_frames,
+        "height": h,
+        "width": w,
+        "fps": pw3d.FPS,
+        "system_prompt": pipe.config.default_use_system_prompt,
+    }
+
+    def build():
+        ids, _ = pipe.tokenize_prompt(PROMPT, num_frames=n_frames, height=h, width=w, fps=pw3d.FPS)
+        return pipe._prepare_text_segment(ids, device="cpu")
+
+    name = f"cosmos3_edge_{n_frames}f_{h}x{w}"
+    if name not in _SEGMENTS:
+        _SEGMENTS[name] = cached_text(name, PROMPT, key, build)
+    return {k: v.to(device) if torch.is_tensor(v) else v for k, v in _SEGMENTS[name].items()}
 
 
 @torch.no_grad()
@@ -36,13 +66,12 @@ def extract_window(pipe, pixels) -> dict[int, torch.Tensor]:
     n_frames, _, h, w = pixels.shape
     lat = pipe._encode_video(pixels.permute(1, 0, 2, 3).unsqueeze(0).to(device, torch.bfloat16))
 
-    ids, _ = pipe.tokenize_prompt(PROMPT, num_frames=n_frames, height=h, width=w, fps=threedpw.FPS)
-    text = pipe._prepare_text_segment(ids, device=device)
+    text = text_segment(pipe, n_frames, h, w, device)
     vis = pipe._prepare_vision_segment(
         input_vision_tokens=lat,
         has_image_condition=False,
         mrope_offset=text["vision_start_temporal_offset"],
-        vision_fps=threedpw.FPS,
+        vision_fps=pw3d.FPS,
         curr=text["und_len"],
         device=device,
         condition_frame_indexes=[],
@@ -85,22 +114,30 @@ def extract_window(pipe, pixels) -> dict[int, torch.Tensor]:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--seqs", nargs="+", required=True, help="3DPW sequence names")
+    ap.add_argument("--seqs", nargs="*", default=[], help="3DPW sequence names, or all")
+    ap.add_argument("--text-only", action="store_true", help="only cache the text tokens")
     ap.add_argument("--frames", type=int, default=0, help="first N frames only (0: all)")
     args = ap.parse_args()
+    if not (args.seqs or args.text_only):
+        ap.error("give --seqs or --text-only")
 
     pipe = Cosmos3OmniPipeline.from_pretrained(
         snapshot_download(MODEL_ID, revision=REVISION),
         torch_dtype=torch.bfloat16,
         enable_safety_checker=False,
-    ).to("cuda")
+    )
+    if args.text_only:  # landscape and portrait windows; the weights stay on the CPU
+        for h, w in ((SHORT, LONG), (LONG, SHORT)):
+            text_segment(pipe, WINDOW, h, w, "cpu")
+        return
+    pipe = pipe.to("cuda")
 
     meta = {
         "model": f"{MODEL_ID}@{REVISION}",
         "layers": LAYERS,
         "prompt": PROMPT,
         "t": 0,
-        "fps": threedpw.FPS,
+        "fps": pw3d.FPS,
     }
     run(partial(extract_window, pipe), NAME, args.seqs, args.frames, meta)
 

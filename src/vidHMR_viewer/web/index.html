@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vidHMR dashboard</title>
+<link rel="stylesheet" href="{{WEB}}/style.css">
+</head>
+<body>
+<header class="top">
+  <h1>vidHMR <span>3DPW</span></h1>
+  <div id="meta" class="meta" hidden></div>
+</header>
+
+<div id="controls" class="controls" hidden>
+  <button id="play" class="primary" aria-label="Play"><svg viewBox="0 0 16 16" aria-hidden="true"><path id="playicon" d="M4 2.5v11l9-5.5z"/></svg><span id="playlabel">Play</span></button>
+  <button id="restart" aria-label="Go to the first frame"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 2.5h2v11H3zM13 2.5v11L6 8z"/></svg>Start</button>
+  <input id="scrub" type="range" min="0" max="0" value="0" step="1" aria-label="Frame">
+  <span id="frame" class="frame"></span>
+  <span class="hint">Space: play or pause</span>
+</div>
+<section class="stage">
+  <div id="viewer" class="viewer"></div>
+  <div id="empty" class="empty">No sequence open. Select a row in a table below.</div>
+  <div id="status" class="status" hidden></div>
+</section>
+
+<nav class="tabs" role="tablist">
+  <button role="tab" data-tab="sequences" aria-selected="true">Sequences</button>
+  <button role="tab" data-tab="sam3d" aria-selected="false">SAM 3D Body</button>
+  <button role="tab" data-tab="summary" aria-selected="false">Dataset summary</button>
+</nav>
+
+<section id="tab-sequences" class="panel">
+  <div class="filters">
+    <div id="subsets" class="chips" role="radiogroup" aria-label="Subset"></div>
+    <label class="field">Actors
+      <select id="actors"><option value="">Any</option><option value="1">1</option><option value="2">2</option></select>
+    </label>
+    <input id="search" type="search" placeholder="Search sequences" aria-label="Search sequences">
+  </div>
+  <p id="subset-note" class="note"></p>
+  <div class="table-wrap"><table id="seq-table"></table></div>
+</section>
+
+<section id="tab-sam3d" class="panel" hidden>
+  <div id="sam3d-missing" class="note" hidden>No results yet. Run
+    <code>sam-3d-body/.venv/bin/python -m vidHMR.sam3d.pw3d --subset all</code> and then
+    <code>.venv/bin/python -m vidHMR.eval.sam3d_pw3d</code>.</div>
+  <div id="sam3d-body">
+    <div class="pair">
+      <table id="sam3d-totals" class="small"></table>
+      <table id="sam3d-joints" class="small"></table>
+    </div>
+    <p id="sam3d-caution" class="caution"></p>
+    <p class="note">Rows are worst MPJPE first. A click opens the sequence at its worst frame.</p>
+    <div class="table-wrap"><table id="sam3d-table"></table></div>
+    <p id="sam3d-notes" class="note"></p>
+  </div>
+</section>
+
+<section id="tab-summary" class="panel" hidden>
+  <table id="summary-table" class="small"></table>
+  <ul class="legend">
+    <li><b>Valid %</b>: the frames where 3DPW marks the camera pose of an actor as valid. The viewer shows the GT body in gray on other frames.</li>
+    <li><b>3DPW-OCC</b>: sequences with strong occlusion. <b>3DPW-PC</b>: frame ranges where people overlap.</li>
+  </ul>
+</section>
+
+<script type="importmap">{ "imports": { "rerun-web-viewer": "{{RERUN}}/index.js" } }</script>
+<script type="module" src="{{WEB}}/app.js"></script>
+</body>
+</html>

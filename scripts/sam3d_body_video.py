@@ -11,9 +11,7 @@ Run in the sam-3d-body env (see envs/sam-3d-body/install.sh), e.g.
 """
 
 import argparse
-import os
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -21,37 +19,11 @@ import cv2
 import numpy as np
 import torch
 
-from vidHMR import GENERATED, REPO
-
-sys.path.insert(0, str(REPO / "external" / "sam-3d-body"))
-os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
-
-from sam_3d_body import SAM3DBodyEstimator, load_sam_3d_body  # noqa: E402
-from tools.build_detector import HumanDetector  # noqa: E402
-from tools.build_fov_estimator import FOVEstimator  # noqa: E402
+# vidHMR.sam3d.run puts the sam-3d-body repo on sys.path, so this import must come after it.
 from tools.vis_utils import visualize_sample_together  # noqa: E402
 
-CKPT = GENERATED / "checkpoints"
-
-
-def build_estimator(device):
-    """Load SAM 3D Body (DINOv3 checkpoint), ViTDet person detector and MoGe-2 FOV estimator."""
-    model, model_cfg = load_sam_3d_body(
-        str(CKPT / "sam-3d-body-dinov3" / "model.ckpt"),
-        device=device,
-        mhr_path=str(CKPT / "sam-3d-body-dinov3" / "assets" / "mhr_model.pt"),
-    )
-    detector = HumanDetector(name="vitdet", device=device, path=str(CKPT / "vitdet"))
-    fov = FOVEstimator(
-        name="moge2", device=device, path=str(CKPT / "moge-2-vitl-normal" / "model.pt")
-    )
-    return SAM3DBodyEstimator(
-        sam_3d_body_model=model,
-        model_cfg=model_cfg,
-        human_detector=detector,
-        human_segmentor=None,
-        fov_estimator=fov,
-    )
+from vidHMR import GENERATED
+from vidHMR.sam3d.run import build_estimator
 
 
 def save_preds(path, outputs):

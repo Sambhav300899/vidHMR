@@ -3,14 +3,28 @@ name = "vidHMR"
 version = "0.1.0"
 description = "Human mesh recovery with a video DiT as the encoder"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = [
+    "numpy",
+    "opencv-python-headless",
+    "imageio",
+    "imageio-ffmpeg",
+    "pandas",
+]
 
 [build-system]
 requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
-dev = ["ruff"]
+dev = ["ruff", "ipykernel", "matplotlib", "nbclient", "nbformat", "mlflow"]
+viewer = ["rerun-sdk==0.43.2", "fast-simplification", "uvicorn", "fastapi"]
+test = ["pytest", "playwright"]
+# GPU mesh rendering. torch from the cu124 index; nvdiffrast is built from source with the local
+# CUDA toolchain:  source .toolchains/env.sh && uv pip install --no-build-isolation git+https://github.com/NVlabs/nvdiffrast.git
+render = ["torch==2.6.0", "nvdiffrast"]
+
+[tool.setuptools.package-data]
+"vidHMR_viewer" = ["web/*.html", "web/*.js", "web/*.css"]
 
 # PEP 8 via ruff (formatter + linter); 99 columns is the limit PEP 8 allows teams to agree on.
 [tool.ruff]

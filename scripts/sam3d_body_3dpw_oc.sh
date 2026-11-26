@@ -6,7 +6,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PY=/edrive4/srohatgi/envs/sam-3d-body/bin/python
+PY=${PY:-/edrive4/srohatgi/envs/sam-3d-body/bin/python}
 OUT=generated/sam3d_body/3dpw_oc
 mkdir -p "$OUT/logs"
 
@@ -14,14 +14,15 @@ mkdir -p "$OUT/logs"
 mapfile -t LISTS < <(PYTHONPATH=src $PY - "$#" <<'PYEOF'
 import sys
 
-from vidHMR import threedpw
+from vidHMR import paths
+from vidHMR.datasets import pw3d
 
 n = int(sys.argv[1])
 lists, counts = [[] for _ in range(n)], [0] * n
-for seq in sorted(threedpw.oc_sequences(), key=lambda s: -len(threedpw.frames(s))):
+for seq in sorted(pw3d.oc_sequences(), key=lambda s: -len(pw3d.frames(s))):
     i = counts.index(min(counts))
-    lists[i].append(f"{threedpw.ROOT}/imageFiles/{seq}")
-    counts[i] += len(threedpw.frames(seq))
+    lists[i].append(f"{paths.PW3D}/imageFiles/{seq}")
+    counts[i] += len(pw3d.frames(seq))
 for folders in lists:
     print(*folders)
 PYEOF

@@ -47,7 +47,9 @@ Their paths are variables at the top (genos layout); change them on another mach
    for f in *.zip; do unzip -q -n "$f"; done && rm *.zip
    ```
    The ground truth uses gendered SMPL. On genos only SMPL_NEUTRAL is available, in
-   `/edrive4/srohatgi/HOSIG/body_models/smpl/`.
+   `/edrive4/srohatgi/HOSIG/body_models/smpl/`. On grogu, `data/smpl/` has the male and female
+   files (Hugging Face mirror camenduru/SMPL_python_v.1.0.0) and `SMPL_NEUTRAL.pkl` (mirror
+   camenduru/SMPLer-X); `vidHMR.body.smpl.load_model` takes 'm', 'f' or 'n'.
 5. **Check:** run each user on a few frames.
    ```bash
    PYTHONPATH=src env -u LD_LIBRARY_PATH \
