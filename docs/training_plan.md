@@ -400,9 +400,10 @@ Decided:
   0.50 s per window (no gain from batching), peak 12.5 GB (batch 1) to 15.8 GB (batch 4). The
   VAE latent of a window is (48, 21, 30, 52) bf16, 3.14 MB; stored features are 25 MB int8.
 - Storage (2026-11-26, the user): the float16 feature copies (295 GB) and the Wan int8 layers
-  other than 15 (74 GB) are deleted; the Wan meta.json files list layer 15 only. The VAE latents
+  other than 15 (74 GB) are deleted, and Cosmos keeps only its middle layer 14 (the meta.json
+  files list the kept layer; `cosmos_layer_27` cannot be rerun without a new extraction). The VAE latents
   of 3DPW train + validation (`wan22 --latents`, 18.2 GB) were encoded on a Brev L40S (1.7 s per
-  window, about 3.5 h, the instance deleted after the download). Total data about 240 GB.
+  window, about 3.5 h, the instance deleted after the download). Total data about 190 GB.
 
 Open:
 
