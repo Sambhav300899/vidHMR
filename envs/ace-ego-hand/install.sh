@@ -43,6 +43,11 @@ $PIP -r "$ACE/requirements.txt" "huggingface_hub[cli]==0.36.2"
 #    do NOT install VideoX-Fun's own requirements.txt over ACE's pins
 $PIP librosa==0.11.0 imageio==2.38.0
 
+# 5b. The live training mode (vidHMR.train, live = true) runs in this env: MLflow (skinny, the
+#     same version as the project venv; the full mlflow would move numpy off ACE's pin) and
+#     tomli (Python 3.10 has no tomllib)
+$PIP "mlflow-skinny==3.18.0" sqlalchemy alembic tomli "numpy==1.24.4"
+
 # 6. Weights (public, no login) into ACE's gitignored ckpt/, where ace_ego_hand.video_vae looks:
 #    config, diffusion safetensors, Wan2.2_VAE.pth, models_t5_umt5-xxl-enc-bf16.pth,
 #    google/umt5-xxl/. On genos a copy already exists: link
