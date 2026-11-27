@@ -11,16 +11,25 @@ validation MPJPE) and last.pt to generated/runs/<name>/.
 import argparse
 import math
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import mlflow
 import numpy as np
-import tomllib
 import torch
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10: the ACE env, which runs the DiT in the live mode
+    import tomli as tomllib
 
 from vidHMR import paths
 from vidHMR.body.smpl import SMPL
 from vidHMR.datasets.bedlam import select, window_name
-from vidHMR.datasets.pw3d_windows import Pw3dWindows, make_loader, split_sequences
+from vidHMR.datasets.pw3d_windows import (
+    Pw3dWindows,
+    make_loader,
+    split_sequences,
+)
 from vidHMR.eval.metrics import mpjpe, pa_mpjpe
 from vidHMR.eval.sam3d_pw3d import ROOT, SMPL_IDX
 from vidHMR.model.body import decode
@@ -58,9 +67,11 @@ def flatten(config: dict, prefix: str = "") -> dict:
 
 def predict(model, smpl, batch):
     """Decoder forward pass in bfloat16 (its heads run in float32), then the decode in float32.
-    The stored int8 features become float16 here (int8 * scale per channel)."""
-    scale = batch["feature_scale"].half()[:, None, None, None]
-    features = batch["features"].half().mul_(scale)
+    The stored int8 features become float16 here (int8 * scale per channel); live features
+    (live_features) have no scale."""
+    features = batch["features"].half()
+    if "feature_scale" in batch:
+        features.mul_(batch["feature_scale"].half()[:, None, None, None])
     with torch.autocast("cuda", dtype=torch.bfloat16):
         *body, joints_2d, joints_relative = model(
             features, batch["prompt_mask"], batch["prompt_latent"], batch["K"],
@@ -110,13 +121,43 @@ def on_gpu(loader):
     yield ready(*upcoming)
 
 
+def live_features(loader, load_window, extract):
+    """Live mode: the batches of `loader` on the GPU, with the features of each item's window
+    from the DiT, run here: extract(load_window(sequence, first_frame)) -> (21, H, W, C). The
+    windows of the next batch load in threads meanwhile."""
+    pool = ThreadPoolExecutor(8)
+
+    def windows(batch):  # (sequence, first frame) of each item; two people can share one
+        return list(zip(batch["sequence"], batch["first_frame"].tolist(), strict=True))
+
+    def load(batch):
+        return batch, {window: pool.submit(load_window, *window) for window in windows(batch)}
+
+    def ready(batch, inputs):
+        with torch.no_grad():
+            features = {window: extract(future.result()) for window, future in inputs.items()}
+        stacked = torch.stack([features[window] for window in windows(batch)])
+        return to_cuda(batch) | {"features": stacked}
+
+    upcoming = None
+    for batch in loader:
+        batch = load(batch)
+        if upcoming is not None:
+            yield ready(*upcoming)
+        upcoming = batch
+    yield ready(*upcoming)
+
+
 def train_items(config: dict) -> Pw3dWindows:
     """The config's `items` (the overfit milestones) or, without them, the 3DPW train split plus
-    the first `bedlam_sequences` BEDLAM windows (vidHMR.datasets.bedlam.select)."""
+    the first `bedlam_sequences` BEDLAM windows (vidHMR.datasets.bedlam.select). With `live`,
+    a window starts at every 4th frame (Pw3dWindows all_starts)."""
+    live = config.get("live", False)
     if "items" not in config:
+        assert not (live and config["bedlam_sequences"]), "live: 3DPW only (wan22.latents_path)"
         bedlam_windows = [window_name(s) for s, _ in select(config["bedlam_sequences"])]
         sequences = split_sequences("train") + bedlam_windows
-        return Pw3dWindows(sequences, config["backbone"], config["layer"])
+        return Pw3dWindows(sequences, config["backbone"], config["layer"], live, live)
     items = [tuple(item) for item in config["items"]]
     sequences = sorted({sequence for sequence, _, _ in items})
     dataset = Pw3dWindows(sequences, config["backbone"], config["layer"])
@@ -157,13 +198,40 @@ def main():
     torch.set_float32_matmul_precision("high")  # TF32 for the float32 heads and decode
     run = paths.generated("runs", config["name"], "last.pt").parent  # creates the run folder
 
+    live = config.get("live", False)  # run the DiT on the stored VAE latents of each batch
     train = train_items(config)
-    train.pin_memory()
+    if not live:
+        train.pin_memory()
     train = make_loader(train, config["batch_size"], config["seed"])
-    validation = Pw3dWindows(split_sequences("validation"), config["backbone"], config["layer"])
+    validation = Pw3dWindows(
+        split_sequences("validation"), config["backbone"], config["layer"], live
+    )
     validation = make_loader(validation, config["batch_size"], config["seed"])
+    if live:
+        from vidHMR.features import wan22  # needs the ACE env
 
-    channels = train.dataset[0]["features"].shape[-1]
+        dit = wan22.load_dit(torch.device("cuda"), layers=(config["layer"],))
+
+        def extract(latents):
+            return dit(latents)[config["layer"]]
+
+        def train_batches():
+            return live_features(train, wan22.window_latents, extract)
+
+        def validation_batches():
+            return live_features(validation, wan22.window_latents, extract)
+
+        channels = extract(wan22.window_latents(*train.dataset.items[0][:2])).shape[-1]
+    else:
+
+        def train_batches():
+            return on_gpu(train)
+
+        def validation_batches():
+            return validation
+
+        channels = train.dataset[0]["features"].shape[-1]
+
     model = PersonDecoder(channels).cuda()
     smpl = SMPL("n", device="cuda")
     optimizer = torch.optim.AdamW(
@@ -189,7 +257,7 @@ def main():
         for epoch in range(1, config["epochs"] + 1):
             log = epoch == 1 or epoch % config["log_every"] == 0  # epoch 1: the start
             rows = []
-            for batch in on_gpu(train):
+            for batch in train_batches():
                 prediction = predict(model, smpl, batch)
                 terms = losses(prediction, batch)
                 total = sum(weights[key] * value for key, value in terms.items())
@@ -226,7 +294,7 @@ def main():
                 )
 
             if epoch % config["validate_every"] == 0 or epoch == config["epochs"]:
-                errors = validate(model, smpl, validation)
+                errors = validate(model, smpl, validation_batches())
                 mlflow.log_metrics({f"validation/{k}": v for k, v in errors.items()}, step=epoch)
                 print(
                     f"validation  MPJPE {errors['mpjpe']:6.1f} mm"

@@ -64,8 +64,19 @@ def load_frames(paths, size) -> torch.Tensor:
 
 def frames_to_tensor(images, size) -> torch.Tensor:
     """BGR images -> (F, 3, H, W) float32 in [-1, 1], RGB, resized to size (W, H)."""
-    frames = [cv2.resize(img, size, interpolation=cv2.INTER_AREA)[:, :, ::-1] for img in images]
-    a = np.stack(frames).astype(np.float32) / 127.5 - 1.0
+    return rgb_to_tensor(resized_rgb(images, size))
+
+
+def resized_rgb(images, size) -> np.ndarray:
+    """BGR images -> (F, H, W, 3) uint8 RGB, resized to size (W, H)."""
+    return np.stack(
+        [cv2.resize(i, size, interpolation=cv2.INTER_AREA)[:, :, ::-1] for i in images]
+    )
+
+
+def rgb_to_tensor(rgb: np.ndarray) -> torch.Tensor:
+    """(F, H, W, 3) uint8 RGB -> (F, 3, H, W) float32 in [-1, 1], the DiT input."""
+    a = rgb.astype(np.float32) / 127.5 - 1.0
     return torch.from_numpy(a).permute(0, 3, 1, 2).contiguous()
 
 

@@ -30,7 +30,7 @@ from torch.utils.data import DataLoader, Dataset, default_collate
 
 from vidHMR.datasets import pw3d
 from vidHMR.datasets.pw3d_targets import targets_path
-from vidHMR.features import N_LATENT, ROOT, WINDOW
+from vidHMR.features import LONG, N_LATENT, ROOT, SHORT, WINDOW
 
 
 def split_sequences(split: str) -> list[str]:
@@ -60,9 +60,21 @@ def window_first_frames(meta: dict) -> list[int]:
 class Pw3dWindows(Dataset):
     """Items (sequence, first_frame, person). Items without a valid latent frame (first_frame +
     4k) with a visible mask are left out: the prompt needs one. A sequence is a 3DPW sequence or
-    a window of another dataset (vidHMR.datasets.bedlam), stored the same way."""
+    a window of another dataset (vidHMR.datasets.bedlam), stored the same way.
 
-    def __init__(self, sequences: list[str], backbone: str = "wan22_fun5b_t0", layer: int = 15):
+    live: the items have no features (vidHMR.train runs the DiT on the window's stored VAE
+    latents, vidHMR.features.wan22.window_latents), and with all_starts a window starts at every
+    4th frame, not only at the extraction windows."""
+
+    def __init__(
+        self,
+        sequences: list[str],
+        backbone: str = "wan22_fun5b_t0",
+        layer: int = 15,
+        live: bool = False,
+        all_starts: bool = False,
+    ):
+        self.live = live
         self.features = {}  # sequence -> (latents, grid height, grid width, channels) int8
         self.scales = {}  # sequence -> (channels,) float32: features = int8 * scale
         self.targets = {}  # sequence -> the arrays of vidHMR.datasets.pw3d_targets
@@ -72,8 +84,9 @@ class Pw3dWindows(Dataset):
         for name in sequences:
             folder = ROOT / backbone / name
             meta = json.loads((folder / "meta.json").read_text())
-            self.features[name] = np.load(folder / f"layer_{layer:02d}_int8.npy")
-            self.scales[name] = np.load(folder / f"layer_{layer:02d}_scale.npy")
+            if not live:
+                self.features[name] = np.load(folder / f"layer_{layer:02d}_int8.npy")
+                self.scales[name] = np.load(folder / f"layer_{layer:02d}_scale.npy")
             with np.load(targets_path(name)) as targets:
                 self.targets[name] = dict(targets)
             masks = self.targets[name]["prompt_masks"]  # 8 times smaller in RAM: one bit each
@@ -82,7 +95,10 @@ class Pw3dWindows(Dataset):
             valid = self.targets[name]["valid"]  # (people, frames)
             masks = self.targets[name]["prompt_masks"]  # (people, latents, H, W / 8)
             assert valid.shape[1] == meta["n_frames"], name
-            for first_frame in window_first_frames(meta):
+            starts = window_first_frames(meta)
+            if all_starts:
+                starts = range(0, meta["n_frames"] - WINDOW + 1, 4)
+            for first_frame in starts:
                 window = slice(first_frame, first_frame + WINDOW)
                 latents = slice(first_frame // 4, first_frame // 4 + N_LATENT)
                 for person in range(valid.shape[0]):
@@ -105,7 +121,8 @@ class Pw3dWindows(Dataset):
 
     def grid_shape(self, index: int) -> tuple[int, int]:
         """(height, width) of the feature grid: 26 x 15 for portrait, 15 x 26 for landscape."""
-        return tuple(self.features[self.items[index][0]].shape[1:3])
+        width, height = self.targets[self.items[index][0]]["image_size"]
+        return (LONG // 32, SHORT // 32) if height > width else (SHORT // 32, LONG // 32)
 
     def __getitem__(self, index: int) -> dict:
         name, first_frame, person = self.items[index]
@@ -121,9 +138,13 @@ class Pw3dWindows(Dataset):
         def person_frames(key):
             return torch.from_numpy(targets[key][person, frames])
 
-        return {
-            "features": torch.as_tensor(self.features[name][latents]),  # (21, H, W, C) int8
-            "feature_scale": torch.as_tensor(self.scales[name]),  # (C,): features = int8 * scale
+        stored = {}
+        if not self.live:
+            stored = {
+                "features": torch.as_tensor(self.features[name][latents]),  # (21, H, W, C) int8
+                "feature_scale": torch.as_tensor(self.scales[name]),  # (C,): int8 * scale
+            }
+        return stored | {
             "global_orient": person_frames("global_orient"),  # (81, 3) camera frame
             "body_pose": person_frames("body_pose"),  # (81, 69)
             "betas_neutral": torch.from_numpy(targets["betas_neutral"][person]),  # (10,)
