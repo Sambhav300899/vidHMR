@@ -389,6 +389,16 @@ Decided:
     114.8** at epoch 90 (`wan_layer_15`: 209.5 / 119.7); 195.4 / 116.6 at epoch 250. The
     heatmaps are flat at first (epoch 20: PnP 0 %); PnP accepts 87 % of the train frames at
     epoch 80 and 98 % at the end; direct 2D 45 px vs FK 8.6 px on train at the end.
+  - Equal loss weights (all 1.0, else as `joints_pnp_3dpw`, with the PnP edge fix): best
+    validation 221.7 mm (ACE weights: 191.5). The ACE weights stay.
+- Diagnosis against the ACE paper (2026-11-26): ARCTIC alone (184k frames, about 9 subjects,
+  test subject held out) gives ACE 16.95 mm, and even raw RGB input 46.5 mm. Our 3DPW train has
+  17,904 frames and 3 people, and our 308 items use 234 fixed windows (every 80 frames, the
+  extraction chunks): about 6 % of the 4,005 window starts at a 4-frame step. ACE draws a new
+  random window from each recording at every step and sees 1.28M clips (we: 80k).
+- Live-mode cost on the RTX 4090 (no gradients): VAE encode 1.48 s per window, DiT to block 15
+  0.50 s per window (no gain from batching), peak 12.5 GB (batch 1) to 15.8 GB (batch 4). The
+  VAE latent of a window is (48, 21, 30, 52) bf16, 3.14 MB; stored features are 25 MB int8.
 
 Open:
 
