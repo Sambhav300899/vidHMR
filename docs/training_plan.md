@@ -368,6 +368,27 @@ Decided:
   - Checks: projected GT mesh vs. BEDLAM masks (closeup, orbit, static, pitch-down scenes):
     mask inside the mesh 0.84–0.96, IoU 0.82–0.86, best at frame offset 0 (vs. −1, +1); the
     GT through `decode` gives ≈ 0 loss (joints 0.8–1.6 mm).
+  - Result `bedlam_1000` (3DPW train + 1,000 windows, 172 epochs): best validation 220.5 /
+    128.3 at epoch 36, then worse (245.7 at the end), so no better than 3DPW only.
+- Pipeline checks (2026-11-26, after `bedlam_1000`):
+  - The models read the features: with the features of another item, `wan_layer_15` goes from
+    17.4 to 283.2 mm on train and from 218.4 to 261.6 mm on validation. They memorize.
+  - Loss balance (the fault): BEDLAM pelvis depth median 6.6 m (95 %: 12.8 m), 3DPW 3.4 m. At
+    `bedlam_1000` best.pt, `joints_3d` + `pelvis` gave 90 % of the trunk gradient on BEDLAM
+    batches, the rotations 2 %. Fix (the user): `joints_3d` and `pelvis` × 3.4 m / GT depth.
+  - 2D error on validation (`wan_layer_15` best): 143 px (20 % of the person height), 85 px
+    (12 %) without the pelvis offset; train 35 px. A ridge probe from mask-pooled features
+    beats the mean pose only a little (195.6 vs 205.8 mm on validation).
+- ACE joint decoder + mixed PnP (decision 2026-11-26, the user): 24 joint tokens, ACE's heatmap
+  readout (soft-argmax over the token centres, as the paper's Eq. 3) and root-relative 3D head,
+  losses `direct_joints_relative` 10.0 and `direct_joints_2d` 1.0, ACE's mixed PnP for the
+  pelvis (gates and fallback as ACE). Reviewed against the ACE code and paper: a correct port,
+  except the PnP edge gate (fixed after the run below: a joint must be 2 % inside the outer
+  token centres, else a joint outside the image votes from the border).
+  - Result `joints_pnp_3dpw` (3DPW only, else as `wan_layer_15`): best validation **191.5 /
+    114.8** at epoch 90 (`wan_layer_15`: 209.5 / 119.7); 195.4 / 116.6 at epoch 250. The
+    heatmaps are flat at first (epoch 20: PnP 0 %); PnP accepts 87 % of the train frames at
+    epoch 80 and 98 % at the end; direct 2D 45 px vs FK 8.6 px on train at the end.
 
 Open:
 

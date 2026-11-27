@@ -89,6 +89,9 @@ def test_mixed_pnp_finds_the_pelvis():
     scattered[..., 1::2, 0] = 0.9
     kept, accepted = pelvis(scattered)
     assert not accepted.any() and torch.allclose(kept, shifted[batch["valid"]], atol=1e-4)
+    at_edge = gt_2d.clone()  # a joint outside the image: the soft-argmax stops at the edge token
+    at_edge[..., 0] = 0.5 / 15  # this portrait video has 15 tokens across
+    assert not pelvis(at_edge)[1].any()
 
 
 def test_ray_angles_known_values():

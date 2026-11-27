@@ -7,11 +7,15 @@ autocast.
 import torch
 import torch.nn.functional as F  # noqa: N812 (the usual PyTorch name)
 
+from vidHMR.features import LONG, SHORT
+
+TOKEN_PX = 32  # pixels of the DiT input for each feature token
+
 MIN_DEPTH = 0.1  # meters; projected points closer than this are clamped to it
 
 # ACE's mixed PnP gates (memory_projector.py, _decode_cam_trans_mixed_pnp).
 PNP_Z_NEAR = 0.05  # meters: a joint votes only in front of the camera
-PNP_MARGIN = 0.02  # ... and inside the image by this fraction of its size
+PNP_MARGIN = 0.02  # ... and this fraction of the image inside the outer token centres
 PNP_MIN_JOINTS = 6  # a frame needs this many votes, and an RMS residual of at most
 PNP_RESIDUAL_FRACTION = 0.25  # max(0.25 * the diagonal of the voting 2D joints' box,
 PNP_RESIDUAL_MIN_PX = 15.0  # 15 px); else it keeps the pelvis of the head
@@ -68,8 +72,14 @@ def mixed_pnp(joints_relative, joints_2d, pelvis, K, image_size):
     scale = focal / z.clamp_min(PNP_Z_NEAR)[..., None]  # d pixel / d pelvis x, y
     offset = joints_2d - centre - joints_relative[..., :2] * scale  # = scale * pelvis x, y
     with torch.no_grad():
+        # Our soft-argmax runs over the token centres, so a joint outside the image stops at
+        # half a token from the edge (ACE's linspace grid puts it at the edge, ACE's margin 0).
+        portrait = (image_size[:, 1] > image_size[:, 0])[:, None]
+        sides = torch.tensor([[LONG, SHORT]], device=image_size.device)
+        tokens = torch.where(portrait, sides.flip(-1), sides) / TOKEN_PX  # (B, 2) along x, y
+        margin = (PNP_MARGIN + 0.5 / tokens)[:, None, None]
         inside = joints_2d / image_size[:, None, None]
-        inside = ((inside > PNP_MARGIN) & (inside < 1 - PNP_MARGIN)).all(-1)
+        inside = ((inside > margin) & (inside < 1 - margin)).all(-1)
         votes = ((z > PNP_Z_NEAR) & inside).float()[..., None]  # (B, F, 24, 1)
     xy = (votes * scale * offset).sum(2) / (votes * scale**2).sum(2).clamp_min(1e-8)
     solved = torch.cat([xy, depth], -1)
